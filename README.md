@@ -1,5 +1,9 @@
 # macsima-qc
 
+[![Tests](https://github.com/mathisbouvet/macsima-qc/actions/workflows/tests.yml/badge.svg)](https://github.com/mathisbouvet/macsima-qc/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/macsima-qc.svg)](https://pypi.org/project/macsima-qc/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **Quality control pipeline for MACSima / MACSiQView cell segmentation**
 
 Python package for evaluating and comparing cell segmentation results from the MACSima cyclic immunofluorescence platform, using manual ROI references from Fiji/ImageJ.

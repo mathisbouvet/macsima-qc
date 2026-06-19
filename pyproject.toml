@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "macsima-qc"
-version = "0.1.0"
+version = "0.1.1"
 description = "Quality control pipeline for MACSima / MACSiQView cell segmentation"
 readme = "README.md"
 license = { text = "MIT" }

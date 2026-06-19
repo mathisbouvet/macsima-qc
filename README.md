@@ -25,6 +25,11 @@ pip install -e .
 
 ---
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mathisbouvet/macsima_qc/main/macsima_qc_linkedin.png" alt="Average Kolmogorov-Smirnov distances by segmentation" width="700">
+</p>
+
+
 ## Workflow
 
 ```

@@ -28,6 +28,7 @@ htmlcov/
 .DS_Store
 
 # Figures générées
+.svg
 figures/
 
 # Fichiers de sortie

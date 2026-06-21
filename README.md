@@ -26,7 +26,7 @@ pip install -e .
 ---
 
 <p align="center">
-![LinkeDin](assets/macsima_qc_linkedin.png)
+<img src="assets/macsima_qc_linkedin.png" width="500">
 </p>
 
 
@@ -139,7 +139,7 @@ The Mann-Whitney U test then compares OK vs KO distributions for each feature. W
 | `macsiq_param_suggestions.csv` | MACSiQView parameter adjustment suggestions |
 
 <p align="center">
-![Distribution](assets/anomaly_scores_distribution.png)
+<img src="assets/anomaly_scores_distribution.png" width="600">
 </p>
 
 <p align="center"><em>Anomaly score distribution from the Isolation Forest — cells below the decision threshold are flagged as <code>Segmentation_KO</code>.</em></p>
@@ -193,11 +193,11 @@ distances = run_comparison(
 This produces a barplot of average KS distances and KDE distribution curves for the main morphological parameters, identifying the automatic segmentation closest to the manual reference.
 
 <p align="center">
-![Distances](assets/ks_average_distances.png)
+<img src="assets/ks_average_distances.png" width="600">
 </p>
 
 <p align="center">
-![Comparé](assets/distributions_comparées.png)
+<img src="assets/distributions_comparées.png" width="800">
 </p>
 
 <p align="center"><em>Lower KS distance = closer match to the manual reference. Here, <strong>Mask 4 – Single Cell</strong> performs best across most morphological parameters.</em></p>

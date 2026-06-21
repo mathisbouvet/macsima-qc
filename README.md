@@ -1,6 +1,8 @@
 # macsima-qc
 [![PyPI](https://img.shields.io/pypi/v/macsima-qc.svg)](https://pypi.org/project/macsima-qc/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/macsima-qc.svg)](https://pypi.org/project/macsima-qc/)
 
 **Quality control pipeline for MACSima / MACSiQView cell segmentation**
 

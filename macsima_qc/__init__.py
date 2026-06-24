@@ -30,7 +30,7 @@ df_annotated, df_suggestions = run_qc_pipeline(
 )
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.4"
 __author__ = "Mathis Bouvet"
 
 from .masks import load_image, load_rois_from_zip, generate_masks

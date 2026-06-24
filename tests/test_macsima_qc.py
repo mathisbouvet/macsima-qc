@@ -155,7 +155,10 @@ def test_load_qc_data(tmp_path):
     df_ref.to_csv(ref_csv, index=False)
     df_test.to_csv(test_csv, index=False)
 
-    X_ref_s, X_test_s, df_test_clean, scaler, feats = load_qc_data(ref_csv, test_csv)
+    # Signature réelle : load_qc_data(test_path, ref_path, features)
+    X_ref_s, X_test_s, df_test_clean, scaler, feats = load_qc_data(
+        test_path=test_csv, ref_path=ref_csv
+    )
 
     assert X_ref_s.shape == (150, 14)
     assert X_test_s.shape == (200, 14)
@@ -174,7 +177,9 @@ def test_run_isolation_forest(tmp_path):
     df_ref.to_csv(ref_csv, index=False)
     df_test.to_csv(test_csv, index=False)
 
-    X_ref_s, X_test_s, df_test_clean, _, _ = load_qc_data(ref_csv, test_csv)
+    X_ref_s, X_test_s, df_test_clean, _, _ = load_qc_data(
+        test_path=test_csv, ref_path=ref_csv
+    )
     export = str(tmp_path / "annotated.csv")
     df_out = run_isolation_forest(
         X_ref_s, X_test_s, df_test_clean,
@@ -202,7 +207,9 @@ def test_run_mann_whitney(tmp_path):
     df_ref.to_csv(ref_csv, index=False)
     df_test.to_csv(test_csv, index=False)
 
-    X_ref_s, X_test_s, df_test_clean, _, feats = load_qc_data(ref_csv, test_csv)
+    X_ref_s, X_test_s, df_test_clean, _, feats = load_qc_data(
+        test_path=test_csv, ref_path=ref_csv
+    )
     df_annotated = run_isolation_forest(
         X_ref_s, X_test_s, df_test_clean,
         output_dir=str(tmp_path / "figures"),
@@ -229,9 +236,10 @@ def test_run_qc_pipeline(tmp_path):
     df_ref.to_csv(ref_csv, index=False)
     df_test.to_csv(test_csv, index=False)
 
+    # Signature réelle : run_qc_pipeline(test_path, ref_path, ...)
     df_annotated, df_suggestions = run_qc_pipeline(
-        ref_path=ref_csv,
         test_path=test_csv,
+        ref_path=ref_csv,
         contamination=0.10,
         output_dir=str(tmp_path / "figures"),
     )

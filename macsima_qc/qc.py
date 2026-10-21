@@ -289,11 +289,11 @@ def run_mann_whitney(
         if p < 0.01:
             if mean_ko < mean_ok:
                 direction = "KO < OK"
-                suggestion = param_map[feature][1]
+                suggestion = param_map.get(feature, ("-", "-", "-"))[1]
                 percent_change = f"+{round((1 - mean_ko / mean_ok) * 100, 1)} %"
             elif mean_ko > mean_ok:
                 direction = "KO > OK"
-                suggestion = param_map[feature][2]
+                suggestion = param_map.get(feature, ("-", "-", "-"))[2]
                 percent_change = f"+{round((mean_ko / mean_ok - 1) * 100, 1)} %"
 
         summary.append({
@@ -307,10 +307,23 @@ def run_mann_whitney(
             "p-value": round(p, 4),
         })
 
-    summary_df = pd.DataFrame(summary).sort_values("p-value")
+    columns = [
+        "Variable", "Moyenne OK", "Moyenne KO", "Différence", "Paramètre MACSiQ lié",
+        "Suggestion d'ajustement", "% de changement indicatif", "p-value",
+    ]
+    summary_df = pd.DataFrame(summary, columns=columns).sort_values("p-value")
 
-    print("\n🧠 Résumé des paramètres MACSiQ à ajuster :\n")
-    print(summary_df.to_string(index=False))
+    if summary_df.empty:
+        n_ok = int((df["Segmentation_Label"] == "OK").sum())
+        n_ko = int((df["Segmentation_Label"] == "KO").sum())
+        print(
+            f"\n⚠️  Comparaison OK/KO impossible ({n_ok} OK · {n_ko} KO, il en faut ≥ 10 de chaque). "
+            "Si presque tout est KO, la référence est probablement inadaptée à ce tissu : "
+            "fournissez la vôtre via ref_path."
+        )
+    else:
+        print("\n🧠 Résumé des paramètres MACSiQ à ajuster :\n")
+        print(summary_df.to_string(index=False))
 
     summary_df.to_csv(export_path, index=False)
     print(f"\n💾 Résumé exporté : {export_path}")

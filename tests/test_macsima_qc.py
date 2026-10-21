@@ -270,11 +270,44 @@ def test_run_qc_pipeline_builtin_reference(tmp_path):
     matplotlib.use("Agg")
     from macsima_qc.qc import run_qc_pipeline
 
-    test_csv = str(tmp_path / "test.csv")
-    make_macsiq_df(n=200, seed=7).to_csv(test_csv, index=False)
+    from macsima_qc.qc import _load_builtin_reference
+    from macsima_qc.utils import FEATURES_TO_USE
 
-    df_annotated, _ = run_qc_pipeline(
+    # Données test réalistes : un échantillon de la référence + quelques cellules aberrantes
+    ref = _load_builtin_reference(FEATURES_TO_USE)
+    df_test = ref.sample(n=300, random_state=0).reset_index(drop=True)
+    df_test.loc[:29, ["Cell Size", "Nucleus Size"]] *= 4
+    test_csv = str(tmp_path / "test.csv")
+    df_test.to_csv(test_csv, index=False)
+
+    df_annotated, df_suggestions = run_qc_pipeline(
         test_path=test_csv,
         output_dir=str(tmp_path / "figures"),
     )
-    assert "Segmentation_OK" in df_annotated.columns
+    assert len(df_annotated) == 300
+    assert (df_annotated["Segmentation_OK"] == 1).mean() > 0.5
+    assert len(df_suggestions) > 0
+
+
+def test_run_mann_whitney_all_ko(tmp_path):
+    """Toutes les cellules KO : pas de crash, tableau vide avec les bonnes colonnes."""
+    from macsima_qc.qc import run_mann_whitney
+    from macsima_qc.utils import FEATURES_TO_USE
+
+    df = make_macsiq_df(n=50)
+    df["Segmentation_OK"] = -1
+    summary_df = run_mann_whitney(df, export_path=str(tmp_path / "s.csv"))
+    assert summary_df.empty
+    assert "p-value" in summary_df.columns
+
+
+def test_run_mann_whitney_custom_feature(tmp_path):
+    """Une feature absente de PARAM_MAP ne doit pas provoquer de KeyError."""
+    from macsima_qc.qc import run_mann_whitney
+    from macsima_qc.utils import FEATURES_TO_USE
+
+    df = make_macsiq_df(n=200)
+    df["Extra"] = np.r_[np.full(100, 1.0), np.full(100, 9.0)] + np.random.default_rng(0).normal(0, .1, 200)
+    df["Segmentation_OK"] = np.r_[np.ones(100), -np.ones(100)].astype(int)
+    summary_df = run_mann_whitney(df, FEATURES_TO_USE + ["Extra"], export_path=str(tmp_path / "s.csv"))
+    assert "Extra" in summary_df["Variable"].values

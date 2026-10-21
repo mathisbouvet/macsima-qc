@@ -65,7 +65,7 @@ def test_load_image_missing():
 def test_generate_masks_shapes():
     """Vérifie que generate_masks produit 4 fichiers .tif."""
     from macsima_qc.masks import generate_masks
-    import cv2
+
 
     image = np.zeros((64, 64, 3), dtype=np.uint8)
     roi_data = {

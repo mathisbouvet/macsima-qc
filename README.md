@@ -124,7 +124,19 @@ The package ships with a built-in reference segmentation derived from a manually
 
 Before fixing the contamination parameter, the model sensitivity is analyzed across a range of values (0.01 → 0.20). The Isolation Forest is then trained exclusively on the reference data. Each test cell receives a label (`Segmentation_OK`: `1` or `-1`) and a continuous anomaly score.
 
-The Mann-Whitney U test then compares OK vs KO distributions for each feature. When a statistically significant difference is found (p < 0.01), the direction of deviation is translated into an operational MACSiQView adjustment suggestion, exported to `macsiq_param_suggestions.csv`.
+For each feature, OK and KO cells are then compared with a two-sided Mann-Whitney U test. Because MACSima datasets contain thousands of cells, almost any difference becomes statistically significant, so the pipeline also reports an **effect size** (Cliff's delta, δ ∈ [−1, 1]; δ > 0 means larger values in KO cells) and corrects p-values for the 14 tests (Benjamini-Hochberg q-values).
+
+A MACSiQView adjustment suggestion is emitted only when the difference is both significant **and** large enough: `q < alpha` (default 0.01) and `|δ| ≥ min_effect` (default 0.33, a "medium" effect according to Romano et al., 2006). Both thresholds can be changed in `run_qc_pipeline(..., alpha=0.01, min_effect=0.33)`. Results are exported to `macsiq_param_suggestions.csv`, sorted by effect size.
+
+| Column | Meaning |
+|--------|---------|
+| `Médiane OK` / `Médiane KO` | Median of the feature in OK / KO cells |
+| `Delta de Cliff`, `Taille d'effet` | Effect size and its magnitude (négligeable < 0.147 ≤ faible < 0.33 ≤ moyenne < 0.474 ≤ forte) |
+| `Écart KO vs OK (médianes)` | Signed relative difference of the medians |
+| `p-value`, `q-value (BH)` | Raw and Benjamini-Hochberg adjusted p-values |
+| `Suggestion d'ajustement` | MACSiQView parameter change, only if `q < alpha` and `|δ| ≥ min_effect` |
+
+> All functions that draw a figure accept `show=False` to save it without displaying it (useful in scripts and batch runs).
 
 
 
@@ -133,6 +145,7 @@ The Mann-Whitney U test then compares OK vs KO distributions for each feature. W
 | File | Description |
 |------|-------------|
 | `mask_1–4.tif` | ROI masks for MACSiQView import |
+| `figures/ks_distances.csv` | KS distance per feature and mean distance per segmentation |
 | `figures/ks_average_distances.png` | KS distance barplot per segmentation |
 | `figures/kde_comparative_distributions.png` | KDE distribution comparison |
 | `figures/contamination_sensitivity.png` | Isolation Forest sensitivity curve |
@@ -193,6 +206,9 @@ distances = run_comparison(
 ```
 
 This produces a barplot of average KS distances and KDE distribution curves for the main morphological parameters, identifying the automatic segmentation closest to the manual reference.
+
+- The mean KS distance is computed on `area`, `perimeter`, `feret` and `mean_intensity`. Cell centroids are loaded but excluded from the score, since cell position depends on the imaged field, not on segmentation quality (change it with `features=[...]`).
+- KDE curves are all expressed on the scale of the manual reference (0–1 = manual min–max), so a systematic size shift of an automatic segmentation stays visible.
 
 <p align="center">
 <img src="assets/ks_average_distances.png" width="600">

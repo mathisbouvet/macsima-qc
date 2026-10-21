@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "macsima-qc"
-version = "0.1.5"
+version = "0.1.6"
 description = "Quality control pipeline for MACSima / MACSiQView cell segmentation"
 readme = "README.md"
 license = "MIT"
@@ -26,7 +26,6 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.23",
-    "opencv-python>=4.7",
     "matplotlib>=3.6",
     "scikit-image>=0.20",
     "read-roi>=1.6",
@@ -34,6 +33,7 @@ dependencies = [
     "scikit-learn>=1.2",
     "scipy>=1.10",
     "seaborn>=0.12",
+    "tifffile>=2022.8.12"
 ]
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov"]

@@ -37,6 +37,3 @@ macsiq_param_suggestions.csv
 
 # VSCode
 .vscode/
-
-# reference
-macsima_qc/data/reference_segmentation.csv

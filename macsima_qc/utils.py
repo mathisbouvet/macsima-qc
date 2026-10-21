@@ -75,7 +75,6 @@ def check_and_install_dependencies():
     """
     required = {
         "numpy": "numpy",
-        "cv2": "opencv-python",
         "matplotlib": "matplotlib",
         "skimage": "scikit-image",
         "read_roi": "read-roi",
@@ -83,6 +82,7 @@ def check_and_install_dependencies():
         "sklearn": "scikit-learn",
         "scipy": "scipy",
         "seaborn": "seaborn",
+        "tifffile": "tifffile",
     }
     print("🧪 Vérification de l'environnement...")
     for module_name, package_name in required.items():

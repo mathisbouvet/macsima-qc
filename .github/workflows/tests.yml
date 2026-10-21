@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
+  workflow_call:      # réutilisé par python-publish.yml avant toute publication
 
 permissions:
   contents: read
@@ -18,20 +19,32 @@ jobs:
         python-version: ["3.9", "3.10", "3.11"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Build wheel and sdist
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Check that the built-in reference is packaged
+        run: |
+          unzip -l dist/*.whl | grep -q "macsima_qc/data/reference_segmentation.csv" \
+            || { echo "reference_segmentation.csv missing from wheel"; exit 1; }
+          tar -tzf dist/*.tar.gz | grep -q "macsima_qc/data/reference_segmentation.csv" \
+            || { echo "reference_segmentation.csv missing from sdist"; exit 1; }
+
+      - name: Install the built wheel (not editable, to test what users get)
+        run: |
           pip install pytest
-          pip install numpy pandas opencv-python-headless scikit-learn scipy matplotlib seaborn read-roi
-          pip install -e .
+          pip install dist/*.whl
 
       - name: Run tests
         run: |
+          # `pytest` (not `python -m pytest`) so the repo root is not on sys.path
+          # and the installed wheel is imported, not the source folder.
           pytest tests/ -v

@@ -137,8 +137,8 @@ The Mann-Whitney U test then compares OK vs KO distributions for each feature. W
 | `figures/kde_comparative_distributions.png` | KDE distribution comparison |
 | `figures/contamination_sensitivity.png` | Isolation Forest sensitivity curve |
 | `figures/anomaly_scores_distribution.png` | Anomaly score histogram |
-| `segmentation_test_annotated.csv` | Cells annotated OK/KO + anomaly score |
-| `macsiq_param_suggestions.csv` | MACSiQView parameter adjustment suggestions |
+| `figures/segmentation_test_annotated.csv` | Cells annotated OK/KO + anomaly score |
+| `figures/macsiq_param_suggestions.csv` | MACSiQView parameter adjustment suggestions |
 
 <p align="center">
 <img src="assets/anomaly_scores_distribution.png" width="600">
@@ -211,7 +211,7 @@ This produces a barplot of average KS distances and KDE distribution curves for 
 ## Requirements
 
 - Python ≥ 3.9
-- numpy, opencv-python, matplotlib, scikit-image, read-roi
+- numpy, matplotlib, scikit-image, tifffile, read-roi
 - pandas, scikit-learn, scipy, seaborn
 
 ---

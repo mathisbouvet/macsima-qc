@@ -7,7 +7,6 @@ Utilise des données synthétiques pour ne pas dépendre de fichiers réels.
 
 import os
 import tempfile
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -246,3 +245,36 @@ def test_run_qc_pipeline(tmp_path):
 
     assert len(df_annotated) == 200
     assert len(df_suggestions) > 0
+
+# ── Tests référence intégrée ───────────────────────────────────────────────────
+
+def test_builtin_reference_is_packaged():
+    """Le CSV de référence doit être livré avec le package (wheel + sdist)."""
+    from importlib import resources
+    from macsima_qc.qc import BUILTIN_REFERENCE
+    from macsima_qc.utils import FEATURES_TO_USE
+
+    ref = resources.files("macsima_qc.data").joinpath(BUILTIN_REFERENCE)
+    assert ref.is_file(), f"{BUILTIN_REFERENCE} absent de macsima_qc/data/"
+
+    with ref.open("r") as f:
+        df = pd.read_csv(f)
+    df.columns = df.columns.str.strip()
+    assert set(FEATURES_TO_USE).issubset(df.columns)
+    assert len(df) > 1000
+
+
+def test_run_qc_pipeline_builtin_reference(tmp_path):
+    """Usage minimal du README : aucun ref_path."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from macsima_qc.qc import run_qc_pipeline
+
+    test_csv = str(tmp_path / "test.csv")
+    make_macsiq_df(n=200, seed=7).to_csv(test_csv, index=False)
+
+    df_annotated, _ = run_qc_pipeline(
+        test_path=test_csv,
+        output_dir=str(tmp_path / "figures"),
+    )
+    assert "Segmentation_OK" in df_annotated.columns

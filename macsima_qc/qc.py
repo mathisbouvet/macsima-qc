@@ -34,18 +34,22 @@ from sklearn.preprocessing import StandardScaler
 from .utils import FEATURES_TO_USE, PARAM_MAP
 
 
+BUILTIN_REFERENCE = "reference_segmentation.csv"
+
+
 def _load_builtin_reference(features: list[str]) -> pd.DataFrame:
     """
-    Charge la référence intégrée au package (Segmentation_1_.csv).
+    Charge la référence intégrée au package (macsima_qc/data/reference_segmentation.csv).
     """
-    try:
-        # Python >= 3.9
-        with resources.files("macsima_qc.data").joinpath("reference_segmentation.csv").open("r") as f:
-            df = pd.read_csv(f)
-    except AttributeError:
-        # Python 3.8 fallback
-        with resources.open_text("macsima_qc.data", "reference_segmentation.csv") as f:
-            df = pd.read_csv(f)
+    ref = resources.files("macsima_qc.data").joinpath(BUILTIN_REFERENCE)
+    if not ref.is_file():
+        raise FileNotFoundError(
+            f"La référence intégrée ({BUILTIN_REFERENCE}) est absente de cette installation "
+            "de macsima-qc. Passez une référence explicite via ref_path=..., ou mettez à jour "
+            "le package (pip install -U macsima-qc)."
+        )
+    with ref.open("r") as f:
+        df = pd.read_csv(f)
 
     df.columns = df.columns.str.strip()
     missing = [c for c in features if c not in df.columns]

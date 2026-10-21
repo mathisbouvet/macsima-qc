@@ -14,15 +14,19 @@ import os
 import random
 import zipfile
 
-import cv2
 import numpy as np
+import tifffile
 from read_roi import read_roi_file
+from skimage import io as skio
 from skimage.draw import polygon, polygon_perimeter
 
 
 def load_image(path: str) -> np.ndarray:
     """
-    Charge une image TIFF (ou tout format supporté par OpenCV).
+    Charge une image TIFF (ou tout format supporté par scikit-image).
+
+    L'image est renvoyée telle quelle (niveaux de gris 8/16 bits, RGB ou
+    multicanal). Seules ses dimensions sont utilisées par generate_masks().
 
     Parameters
     ----------
@@ -32,17 +36,31 @@ def load_image(path: str) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        Image chargée sous forme de tableau NumPy (BGR).
+        Image chargée sous forme de tableau NumPy.
 
     Raises
     ------
     FileNotFoundError
         Si le fichier est introuvable ou illisible.
     """
-    image = cv2.imread(path)
-    if image is None:
-        raise FileNotFoundError(f"Image introuvable ou illisible : {path}")
-    return image
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Image introuvable : {path}")
+    try:
+        return skio.imread(path)
+    except Exception as e:
+        raise FileNotFoundError(f"Image illisible : {path} ({e})") from e
+
+
+def _image_hw(image: np.ndarray) -> tuple[int, int]:
+    """
+    Renvoie (hauteur, largeur) d'une image 2D, RGB(A) (H, W, 3|4)
+    ou multicanal/multipage (C, H, W).
+    """
+    if image.ndim == 2:
+        return image.shape
+    if image.ndim == 3 and image.shape[-1] in (3, 4):
+        return image.shape[:2]
+    return image.shape[-2:]
 
 
 def load_rois_from_zip(zip_path: str, extract_folder: str = "roi_dezip") -> dict:
@@ -90,7 +108,7 @@ def generate_masks(image: np.ndarray, roi_data: dict, output_dir: str = ".") -> 
     Parameters
     ----------
     image : np.ndarray
-        Image de référence (pour les dimensions).
+        Image de référence (seules ses dimensions H × W sont utilisées).
     roi_data : dict
         Dictionnaire de ROIs issu de load_rois_from_zip().
     output_dir : str
@@ -103,49 +121,50 @@ def generate_masks(image: np.ndarray, roi_data: dict, output_dir: str = ".") -> 
     """
     os.makedirs(output_dir, exist_ok=True)
     paths = {}
+    hw = _image_hw(image)
 
     # --- Masque 1 : couleurs aléatoires ---
-    masked = np.zeros_like(image)
+    masked = np.zeros((*hw, 3), dtype=np.uint8)
     for roi in roi_data.values():
         x, y = np.array(roi["x"]), np.array(roi["y"])
-        rr, cc = polygon(y, x, shape=image.shape[:2])
+        rr, cc = polygon(y, x, shape=hw)
         color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         masked[rr, cc] = color
     path = os.path.join(output_dir, "mask_1.tif")
-    cv2.imwrite(path, masked)
+    tifffile.imwrite(path, masked, photometric="rgb")
     paths["mask_1"] = path
 
     # --- Masque 2 : couleurs RGB cycliques ---
     colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-    masked = np.zeros_like(image)
+    masked = np.zeros((*hw, 3), dtype=np.uint8)
     for idx, roi in enumerate(roi_data.values()):
         x, y = np.array(roi["x"]), np.array(roi["y"])
-        rr, cc = polygon(y, x, shape=image.shape[:2])
+        rr, cc = polygon(y, x, shape=hw)
         masked[rr, cc] = colors[idx % len(colors)]
     path = os.path.join(output_dir, "mask_2.tif")
-    cv2.imwrite(path, masked)
+    tifffile.imwrite(path, masked, photometric="rgb")
     paths["mask_2"] = path
 
     # --- Masque 3 : niveaux de gris cumulatifs ---
-    gray = np.zeros(image.shape[:2], dtype=np.uint8)
+    gray = np.zeros(hw, dtype=np.uint8)
     for roi in roi_data.values():
         x, y = np.array(roi["x"]), np.array(roi["y"])
-        rr, cc = polygon(y, x, shape=image.shape[:2])
+        rr, cc = polygon(y, x, shape=hw)
         gray[rr, cc] = np.clip(gray[rr, cc] + 50, 0, 255)
     path = os.path.join(output_dir, "mask_3.tif")
-    cv2.imwrite(path, gray)
+    tifffile.imwrite(path, gray, photometric="minisblack")
     paths["mask_3"] = path
 
     # --- Masque 4 : niveaux de gris + contours ---
-    gray = np.zeros(image.shape[:2], dtype=np.uint8)
+    gray = np.zeros(hw, dtype=np.uint8)
     for roi in roi_data.values():
         x, y = np.array(roi["x"]), np.array(roi["y"])
-        rr, cc = polygon(y, x, shape=image.shape[:2])
+        rr, cc = polygon(y, x, shape=hw)
         gray[rr, cc] = np.clip(gray[rr, cc] + 50, 0, 255)
-        rr_p, cc_p = polygon_perimeter(y, x, shape=image.shape[:2])
+        rr_p, cc_p = polygon_perimeter(y, x, shape=hw)
         gray[rr_p, cc_p] = 0
     path = os.path.join(output_dir, "mask_4.tif")
-    cv2.imwrite(path, gray)
+    tifffile.imwrite(path, gray, photometric="minisblack")
     paths["mask_4"] = path
 
     print(f"✅ 4 masques générés dans : {output_dir}")

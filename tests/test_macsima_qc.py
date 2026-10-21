@@ -53,6 +53,11 @@ def test_constants_exist():
     assert len(MANUAL_COLUMNS) == 6
     assert "Nucleus Size" in PARAM_MAP
 
+    def test_version_matches_metadata():
+        from importlib.metadata import version
+        import macsima_qc
+        assert macsima_qc.__version__ == version("macsima-qc")
+
 
 # ── Tests masks ─────────────────────────────────────────────────────────────
 

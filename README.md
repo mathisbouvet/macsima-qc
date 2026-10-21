@@ -211,7 +211,7 @@ This produces a barplot of average KS distances and KDE distribution curves for 
 ## Requirements
 
 - Python ≥ 3.9
-- numpy, opencv-python, matplotlib, scikit-image, read-roi
+- numpy, matplotlib, scikit-image, tifffile, read-roi
 - pandas, scikit-learn, scipy, seaborn
 
 ---

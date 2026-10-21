@@ -22,7 +22,6 @@ Fonctions principales
 """
 
 import os
-import warnings
 from importlib import resources
 
 import matplotlib.pyplot as plt
@@ -88,8 +87,6 @@ def load_qc_data(
     if features is None:
         features = FEATURES_TO_USE
 
-    warnings.filterwarnings("ignore")
-
     # Chargement référence
     if ref_path is None:
         X_ref = _load_builtin_reference(features)
@@ -111,6 +108,12 @@ def load_qc_data(
 
     X_test = df_test[features].dropna()
     df_test_clean = df_test.loc[X_test.index].copy()
+    n_dropped = len(df_test) - len(X_test)
+    if n_dropped:
+        print(
+            f"⚠️  {n_dropped} cellule(s) test avec des valeurs manquantes exclue(s) de l'analyse "
+            "(Segmentation_OK = NaN dans les résultats du pipeline)"
+        )
 
     scaler = StandardScaler()
     X_ref_scaled = scaler.fit_transform(X_ref)
@@ -182,6 +185,7 @@ def run_isolation_forest(
     contamination: float = 0.10,
     output_dir: str = "figures",
     export_path: str = None,
+    df_test_full: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """
     Entraîne l'Isolation Forest final et annote les cellules test.
@@ -196,11 +200,16 @@ def run_isolation_forest(
         Dossier de sortie (figure + CSV annoté).
     export_path : str, optional
         Chemin du CSV annoté. Par défaut : <output_dir>/segmentation_test_annotated.csv.
+    df_test_full : pd.DataFrame, optional
+        CSV test complet, y compris les cellules exclues pour valeurs manquantes.
+        Si fourni, la sortie a une ligne par cellule du CSV d'origine, dans le même
+        ordre ; les cellules exclues ont Segmentation_OK et Anomaly_Score à NaN.
 
     Returns
     -------
     pd.DataFrame
-        df_test_clean enrichi de Segmentation_OK et Anomaly_Score.
+        df_test_clean (ou df_test_full) enrichi de Segmentation_OK (1 = OK, -1 = KO)
+        et Anomaly_Score.
     """
     os.makedirs(output_dir, exist_ok=True)
     if export_path is None:
@@ -211,9 +220,12 @@ def run_isolation_forest(
     preds = model.predict(X_test_scaled)
     scores = model.decision_function(X_test_scaled)
 
-    df_out = df_test_clean.copy()
-    df_out["Segmentation_OK"] = preds
-    df_out["Anomaly_Score"] = scores
+    if df_test_full is None:
+        df_out = df_test_clean.copy()
+    else:
+        df_out = df_test_full.copy()
+    df_out["Segmentation_OK"] = pd.Series(preds, index=df_test_clean.index).astype("Int64")
+    df_out["Anomaly_Score"] = pd.Series(scores, index=df_test_clean.index)
 
     nb_total = len(preds)
     nb_valides = (preds == 1).sum()
@@ -371,10 +383,18 @@ def run_qc_pipeline(
     Returns
     -------
     tuple[pd.DataFrame, pd.DataFrame]
-        (df_annotated, df_suggestions)
+        (df_annotated, df_suggestions). df_annotated a une ligne par cellule du CSV
+        test, dans le même ordre ; les cellules avec des valeurs manquantes sur les
+        features ne sont pas évaluées (Segmentation_OK = NaN).
     """
     X_ref_s, X_test_s, df_test_clean, _, feats = load_qc_data(test_path, ref_path, features)
+    df_test_full = pd.read_csv(test_path)
+    df_test_full.columns = df_test_full.columns.str.strip()
+
     contamination_sensitivity(X_ref_s, X_test_s, sensitivity_values, output_dir)
-    df_annotated = run_isolation_forest(X_ref_s, X_test_s, df_test_clean, contamination, output_dir)
+    df_annotated = run_isolation_forest(
+        X_ref_s, X_test_s, df_test_clean, contamination, output_dir,
+        df_test_full=df_test_full,
+    )
     df_suggestions = run_mann_whitney(df_annotated, feats, output_dir=output_dir)
     return df_annotated, df_suggestions

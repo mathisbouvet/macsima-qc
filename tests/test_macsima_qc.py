@@ -85,6 +85,117 @@ def test_generate_masks_shapes():
             assert os.path.exists(path), f"Fichier manquant : {path}"
 
 
+@pytest.mark.parametrize("shape,dtype", [
+    ((64, 64), np.uint16),       # DAPI 16 bits niveaux de gris
+    ((64, 64, 3), np.uint8),     # RGB
+    ((2, 64, 64), np.uint16),    # multicanal (C, H, W)
+])
+def test_generate_masks_any_input(shape, dtype, tmp_path):
+    """Masques 8 bits de taille H × W, quel que soit le format de l'image source."""
+    import tifffile
+    from macsima_qc.masks import generate_masks, load_image
+
+    src = tmp_path / "dapi.tif"
+    tifffile.imwrite(src, np.zeros(shape, dtype=dtype))
+    image = load_image(str(src))
+
+    roi_data = {"roi_1": {"x": [10, 20, 20, 10], "y": [10, 10, 20, 20]}}
+    paths = generate_masks(image, roi_data, output_dir=str(tmp_path / "masks"))
+
+    for name in ("mask_1", "mask_2"):
+        m = tifffile.imread(paths[name])
+        assert m.shape == (64, 64, 3) and m.dtype == np.uint8
+    for name in ("mask_3", "mask_4"):
+        m = tifffile.imread(paths[name])
+        assert m.shape == (64, 64) and m.dtype == np.uint8
+    assert tifffile.imread(paths["mask_3"])[15, 15] == 50
+
+
+# Encodeur minimal du format ROI ImageJ, pour tester sur de vrais RoiSet.zip
+_ROI_TYPES = {"polygon": 0, "rect": 1, "oval": 2, "line": 3, "freehand": 7}
+
+
+def _roi_bytes(kind, top, left, bottom, right, xs=(), ys=()):
+    import struct
+    h = bytearray(64)
+    h[0:4] = b"Iout"
+    struct.pack_into(">h", h, 4, 227)
+    h[6] = _ROI_TYPES[kind]
+    struct.pack_into(">hhhhh", h, 8, top, left, bottom, right, len(xs))
+    body = b"".join(struct.pack(">h", x - left) for x in xs)
+    body += b"".join(struct.pack(">h", y - top) for y in ys)
+    struct.pack_into(">i", h, 60, 64 + len(body))  # offset du header2, comme Fiji
+    return bytes(h) + body + bytes(64)
+
+
+def _write_roiset(path, rois):
+    import zipfile
+    with zipfile.ZipFile(path, "w") as z:
+        for name, b in rois.items():
+            z.writestr(f"{name}.roi", b)
+    return str(path)
+
+
+def test_load_rois_from_zip_reads_only_this_zip(tmp_path, monkeypatch):
+    """Deux zips successifs : pas de mélange, rien d'extrait sur disque."""
+    from macsima_qc.masks import load_rois_from_zip
+
+    monkeypatch.chdir(tmp_path)
+    sq = _roi_bytes("polygon", 10, 10, 21, 21, [10, 20, 20, 10], [10, 10, 20, 20])
+    zip_a = _write_roiset(tmp_path / "A.zip", {"a1": sq, "a2": sq, "a3": sq})
+    zip_b = _write_roiset(tmp_path / "B.zip", {"b1": sq})
+
+    assert set(load_rois_from_zip(zip_a)) == {"a1", "a2", "a3"}
+    assert set(load_rois_from_zip(zip_b)) == {"b1"}
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["A.zip", "B.zip"]
+
+
+def test_load_rois_from_zip_missing():
+    from macsima_qc.masks import load_rois_from_zip
+    with pytest.raises(FileNotFoundError):
+        load_rois_from_zip("RoiSet_inexistant.zip")
+
+
+def test_generate_masks_rectangle_oval_line(tmp_path):
+    """Rectangles et ovales Fiji sont dessinés ; les lignes sont ignorées avec un warning."""
+    import tifffile
+    from macsima_qc.masks import generate_masks, load_rois_from_zip
+
+    zip_path = _write_roiset(tmp_path / "RoiSet.zip", {
+        "rect": _roi_bytes("rect", 30, 5, 40, 25),    # 20 × 10 px
+        "oval": _roi_bytes("oval", 40, 40, 60, 60),   # disque de diamètre 20 px
+        "line": _roi_bytes("line", 0, 0, 5, 5),
+    })
+    rois = load_rois_from_zip(zip_path)
+
+    with pytest.warns(UserWarning, match="line"):
+        paths = generate_masks(np.zeros((64, 64), np.uint16), rois, output_dir=str(tmp_path))
+
+    m3 = tifffile.imread(paths["mask_3"])
+    rect_px = int((m3[30:40, 5:25] == 50).sum())
+    assert rect_px == 200                                   # exactement left..left+w-1 × top..top+h-1
+    assert (m3[:30, :] == 0).all() and (m3[40:, :30] == 0).all()
+    oval_px = int((m3[40:60, 40:60] == 50).sum())
+    assert abs(oval_px - np.pi * 10 ** 2) < 0.1 * np.pi * 10 ** 2
+    assert m3[50, 50] == 50 and m3[40, 40] == 0             # centre plein, coin vide
+
+    m4 = tifffile.imread(paths["mask_4"])
+    assert m4[30, 10] == 0 and m4[35, 15] == 50             # contour noir, intérieur gris
+
+
+def test_mask_overlap_saturates_at_255(tmp_path):
+    """6 ROIs superposés : 255 (plafonné), et non 44 (débordement uint8)."""
+    import tifffile
+    from macsima_qc.masks import generate_masks
+
+    square = {"x": [10, 20, 20, 10], "y": [10, 10, 20, 20]}
+    rois = {f"roi_{i}": dict(square) for i in range(6)}
+    paths = generate_masks(np.zeros((32, 32), np.uint8), rois, output_dir=str(tmp_path))
+
+    assert tifffile.imread(paths["mask_3"])[15, 15] == 255
+    assert tifffile.imread(paths["mask_4"])[15, 15] == 255
+
+
 # ── Tests comparison ─────────────────────────────────────────────────────────
 
 def test_normalize_datasets():
@@ -339,3 +450,32 @@ def test_outputs_go_to_output_dir(tmp_path, monkeypatch):
     assert list(work.iterdir()) == []
     assert (out / "segmentation_test_annotated.csv").exists()
     assert (out / "macsiq_param_suggestions.csv").exists()
+
+
+def test_pipeline_keeps_rows_with_nan(tmp_path):
+    """Les cellules avec NaN restent dans la sortie (non évaluées), dans l'ordre d'origine."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from macsima_qc.qc import run_qc_pipeline
+
+    ref_csv = str(tmp_path / "ref.csv")
+    make_macsiq_df(n=150).to_csv(ref_csv, index=False)
+
+    df_test = make_macsiq_df(n=200, seed=7)
+    df_test["Cell ID"] = range(200)
+    df_test.loc[[3, 50, 199], "Cell Size"] = np.nan
+    test_csv = str(tmp_path / "test.csv")
+    df_test.to_csv(test_csv, index=False)
+
+    df_annotated, _ = run_qc_pipeline(
+        test_path=test_csv, ref_path=ref_csv, output_dir=str(tmp_path / "out"),
+    )
+
+    assert len(df_annotated) == 200
+    assert df_annotated["Cell ID"].tolist() == list(range(200))
+    assert df_annotated["Segmentation_OK"].isna().sum() == 3
+    assert df_annotated.loc[[3, 50, 199], "Segmentation_OK"].isna().all()
+    assert set(df_annotated["Segmentation_OK"].dropna().unique()).issubset({1, -1})
+
+    exported = pd.read_csv(tmp_path / "out" / "segmentation_test_annotated.csv")
+    assert len(exported) == 200

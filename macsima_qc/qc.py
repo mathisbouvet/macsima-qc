@@ -17,7 +17,7 @@ Fonctions principales
 - load_qc_data(test_path, ref_path, features)
 - contamination_sensitivity(X_ref_scaled, X_test_scaled, values, output_dir)
 - run_isolation_forest(X_ref_scaled, X_test_scaled, df_test_clean, contamination, output_dir)
-- run_mann_whitney(df_annotated, features, output_dir)
+- run_mann_whitney(df_annotated, features, param_map, export_path, output_dir)
 - run_qc_pipeline(test_path, ref_path, contamination, output_dir)
 """
 
@@ -181,7 +181,7 @@ def run_isolation_forest(
     df_test_clean: pd.DataFrame,
     contamination: float = 0.10,
     output_dir: str = "figures",
-    export_path: str = "segmentation_test_annotated.csv",
+    export_path: str = None,
 ) -> pd.DataFrame:
     """
     Entraîne l'Isolation Forest final et annote les cellules test.
@@ -193,7 +193,9 @@ def run_isolation_forest(
     df_test_clean : pd.DataFrame
     contamination : float
     output_dir : str
-    export_path : str
+        Dossier de sortie (figure + CSV annoté).
+    export_path : str, optional
+        Chemin du CSV annoté. Par défaut : <output_dir>/segmentation_test_annotated.csv.
 
     Returns
     -------
@@ -201,6 +203,8 @@ def run_isolation_forest(
         df_test_clean enrichi de Segmentation_OK et Anomaly_Score.
     """
     os.makedirs(output_dir, exist_ok=True)
+    if export_path is None:
+        export_path = os.path.join(output_dir, "segmentation_test_annotated.csv")
 
     model = IsolationForest(contamination=contamination, random_state=42)
     model.fit(X_ref_scaled)
@@ -240,7 +244,8 @@ def run_mann_whitney(
     df_annotated: pd.DataFrame,
     features: list[str] = None,
     param_map: dict = None,
-    export_path: str = "macsiq_param_suggestions.csv",
+    export_path: str = None,
+    output_dir: str = "figures",
 ) -> pd.DataFrame:
     """
     Compare les cellules OK vs KO par test Mann-Whitney U et génère des
@@ -251,7 +256,10 @@ def run_mann_whitney(
     df_annotated : pd.DataFrame
     features : list[str]
     param_map : dict
-    export_path : str
+    export_path : str, optional
+        Chemin du CSV de suggestions. Par défaut : <output_dir>/macsiq_param_suggestions.csv.
+    output_dir : str
+        Dossier de sortie utilisé si export_path n'est pas fourni.
 
     Returns
     -------
@@ -261,6 +269,9 @@ def run_mann_whitney(
         features = FEATURES_TO_USE
     if param_map is None:
         param_map = PARAM_MAP
+    if export_path is None:
+        os.makedirs(output_dir, exist_ok=True)
+        export_path = os.path.join(output_dir, "macsiq_param_suggestions.csv")
 
     df = df_annotated.copy()
     df = df.dropna(subset=features + ["Segmentation_OK"])
@@ -353,6 +364,8 @@ def run_qc_pipeline(
     features : list[str]
         Features à utiliser (par défaut : FEATURES_TO_USE).
     output_dir : str
+        Dossier de sortie pour toutes les figures et les deux CSV
+        (segmentation_test_annotated.csv, macsiq_param_suggestions.csv).
     sensitivity_values : list[float]
 
     Returns
@@ -363,5 +376,5 @@ def run_qc_pipeline(
     X_ref_s, X_test_s, df_test_clean, _, feats = load_qc_data(test_path, ref_path, features)
     contamination_sensitivity(X_ref_s, X_test_s, sensitivity_values, output_dir)
     df_annotated = run_isolation_forest(X_ref_s, X_test_s, df_test_clean, contamination, output_dir)
-    df_suggestions = run_mann_whitney(df_annotated, feats)
+    df_suggestions = run_mann_whitney(df_annotated, feats, output_dir=output_dir)
     return df_annotated, df_suggestions

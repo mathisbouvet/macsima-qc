@@ -316,3 +316,26 @@ def test_run_mann_whitney_custom_feature(tmp_path):
     df["Segmentation_OK"] = np.r_[np.ones(100), -np.ones(100)].astype(int)
     summary_df = run_mann_whitney(df, FEATURES_TO_USE + ["Extra"], export_path=str(tmp_path / "s.csv"))
     assert "Extra" in summary_df["Variable"].values
+
+
+def test_outputs_go_to_output_dir(tmp_path, monkeypatch):
+    """Aucun fichier ne doit être écrit dans le dossier courant."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from macsima_qc.qc import run_qc_pipeline
+
+    work = tmp_path / "cwd"
+    work.mkdir()
+    monkeypatch.chdir(work)
+
+    ref_csv = str(tmp_path / "ref.csv")
+    test_csv = str(tmp_path / "test.csv")
+    make_macsiq_df(n=150).to_csv(ref_csv, index=False)
+    make_macsiq_df(n=200, seed=7).to_csv(test_csv, index=False)
+
+    out = tmp_path / "results"
+    run_qc_pipeline(test_path=test_csv, ref_path=ref_csv, output_dir=str(out))
+
+    assert list(work.iterdir()) == []
+    assert (out / "segmentation_test_annotated.csv").exists()
+    assert (out / "macsiq_param_suggestions.csv").exists()

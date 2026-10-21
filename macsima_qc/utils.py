@@ -11,6 +11,11 @@ import sys
 # Colonnes morphologiques de base (segmentation manuelle Fiji)
 MANUAL_COLUMNS = ["area", "perimeter", "centroid_x", "centroid_y", "feret", "mean_intensity"]
 
+# Features morphologiques utilisées pour le score KS (distance moyenne).
+# centroid_x / centroid_y sont exclus : la position d'une cellule dépend du champ
+# imagé, pas de la qualité de la segmentation.
+KS_FEATURES = ["area", "perimeter", "feret", "mean_intensity"]
+
 # Mapping colonnes Fiji → noms normalisés
 MANUAL_RENAME_MAP = {
     "Area": "area",

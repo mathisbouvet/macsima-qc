@@ -479,3 +479,135 @@ def test_pipeline_keeps_rows_with_nan(tmp_path):
 
     exported = pd.read_csv(tmp_path / "out" / "segmentation_test_annotated.csv")
     assert len(exported) == 200
+
+# ── Tests 0.2.0 : méthodologie ──────────────────────────────────────────────
+
+def test_bh_matches_reference():
+    from macsima_qc.qc import _bh_adjust
+    p = np.array([0.001, 0.008, 0.039, 0.041, 0.042, 0.06, 0.074, 0.205])
+    # Valeurs de référence (R : p.adjust(p, "BH"))
+    expected = [0.008, 0.032, 0.0672, 0.0672, 0.0672, 0.08, 0.0845714, 0.205]
+    assert np.allclose(_bh_adjust(p), expected, atol=1e-6)
+
+
+def _mw_frame(ok_vals, ko_vals, feature="Cell Size"):
+    return pd.DataFrame({
+        feature: np.r_[ok_vals, ko_vals],
+        "Segmentation_OK": np.r_[np.ones(len(ok_vals)), -np.ones(len(ko_vals))].astype(int),
+    })
+
+
+def test_cliff_delta_matches_brute_force(tmp_path):
+    from macsima_qc.qc import run_mann_whitney
+    rng = np.random.default_rng(1)
+    ok = rng.integers(0, 6, 40).astype(float)   # nombreux ex aequo
+    ko = rng.integers(1, 7, 30).astype(float)
+    brute = np.mean([np.sign(k - o) for k in ko for o in ok])
+
+    res = run_mann_whitney(_mw_frame(ok, ko), ["Cell Size"], export_path=str(tmp_path / "s.csv"))
+    assert res.loc[0, "Delta de Cliff"] == pytest.approx(brute, abs=1e-3)
+
+
+def test_large_n_small_shift_gives_no_suggestion(tmp_path):
+    """Grand n + décalage minime : significatif, mais effet négligeable → pas de suggestion."""
+    from macsima_qc.qc import run_mann_whitney
+    rng = np.random.default_rng(0)
+    df = _mw_frame(rng.normal(100, 10, 4000), rng.normal(101.5, 10, 4000))
+
+    res = run_mann_whitney(df, ["Cell Size"], export_path=str(tmp_path / "s.csv"))
+    row = res.iloc[0]
+    assert row["q-value (BH)"] < 0.01
+    assert row["Taille d'effet"] == "négligeable"
+    assert row["Suggestion d'ajustement"] == "-"
+
+
+@pytest.mark.parametrize("shift,direction,sign", [(-40, "KO < OK", "-"), (40, "KO > OK", "+")])
+def test_large_effect_gives_directional_suggestion(shift, direction, sign, tmp_path):
+    from macsima_qc.qc import run_mann_whitney
+    from macsima_qc.utils import PARAM_MAP
+    rng = np.random.default_rng(0)
+    df = _mw_frame(rng.normal(100, 10, 300), rng.normal(100 + shift, 10, 300))
+
+    row = run_mann_whitney(df, ["Cell Size"], export_path=str(tmp_path / "s.csv")).iloc[0]
+    assert row["Différence"] == direction
+    assert row["Taille d'effet"] == "forte"
+    assert row["Suggestion d'ajustement"] == PARAM_MAP["Cell Size"][1 if shift < 0 else 2]
+    assert row["Écart KO vs OK (médianes)"].startswith(sign)
+
+
+def test_ks_score_ignores_centroids():
+    """Déplacer les cellules (centroïdes) ne doit pas changer le score KS."""
+    from macsima_qc.comparison import compute_ks_distances
+    manual = make_manual_df()
+    auto = make_auto_df()
+    moved = auto.copy()
+    moved["centroid_x"] += 5000
+    moved["centroid_y"] += 5000
+    legend = {"Auto1": "A", "Auto2": "A déplacé"}
+
+    d = compute_ks_distances(manual, [auto, moved], legend)
+    assert "centroid_x" not in d.columns
+    assert d.loc["Auto1", "Mean Distance"] == pytest.approx(d.loc["Auto2", "Mean Distance"])
+
+
+def test_ks_identical_on_raw_and_scaled():
+    from macsima_qc.comparison import compute_ks_distances, normalize_datasets
+    manual, autos = make_manual_df(), [make_auto_df(seed=1), make_auto_df(seed=2)]
+    legend = {"Auto1": "A", "Auto2": "B"}
+    raw = compute_ks_distances(manual, autos, legend)
+    m_n, a_n = normalize_datasets(manual, autos)
+    assert np.allclose(raw.values, compute_ks_distances(m_n, a_n, legend).values)
+
+
+def test_kde_keeps_size_offset(tmp_path):
+    """Une segmentation auto 2× trop grosse doit rester décalée dans les KDE."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from macsima_qc.comparison import normalize_datasets, plot_kde
+
+    manual = make_manual_df()
+    auto = manual.copy()
+    auto["area"] *= 2
+    m_n, (a_n,) = normalize_datasets(manual, [auto])
+    assert a_n["area"].median() > 1          # hors de [0, 1] de la référence
+
+    fig = plot_kde(m_n, [a_n], {"Auto1": "x2"}, output_dir=str(tmp_path), show=False)
+    ax = fig.axes[0]
+    peaks = [line.get_xdata()[np.argmax(line.get_ydata())] for line in ax.get_lines()]
+    assert abs(peaks[0] - peaks[1]) > 0.5     # pics auto et manuel séparés
+
+
+def test_plots_do_not_leak_style_or_figures(tmp_path):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from macsima_qc.comparison import compute_ks_distances, plot_kde, plot_ks_barplot
+
+    plt.close("all")
+    facecolor = plt.rcParams["axes.facecolor"]
+    manual, autos = make_manual_df(), [make_auto_df()]
+    legend = {"Auto1": "A"}
+    d = compute_ks_distances(manual, autos, legend)
+
+    plot_ks_barplot(d, legend, output_dir=str(tmp_path), show=False)
+    params = ["area", "perimeter", "feret", "mean_intensity", "centroid_x"]   # 5 > 4 panneaux
+    plot_kde(manual, autos, legend, output_dir=str(tmp_path), params=params, show=False)
+
+    assert plt.rcParams["axes.facecolor"] == facecolor
+    assert plt.get_fignums() == []
+
+
+def test_run_comparison_exports_ks_table(tmp_path):
+    import matplotlib
+    matplotlib.use("Agg")
+    from macsima_qc.comparison import run_comparison
+    from macsima_qc.utils import AUTO_RENAME_MAP, MANUAL_RENAME_MAP
+
+    manual_csv = tmp_path / "manual.csv"
+    make_manual_df().rename(columns={v: k for k, v in MANUAL_RENAME_MAP.items()}).to_csv(manual_csv, index=False)
+    auto_csv = tmp_path / "auto.csv"
+    make_auto_df().rename(columns={v: k for k, v in AUTO_RENAME_MAP.items()}).to_csv(auto_csv, index=False)
+
+    out = tmp_path / "figs"
+    run_comparison(str(manual_csv), [str(auto_csv)], ["A"], output_dir=str(out), show=False)
+    assert (out / "ks_distances.csv").exists()
